@@ -2,10 +2,8 @@
 
 ## Current State & Active Deliverables
 
-1. **Active Project — PDF-Guard & Course Vault (`/home/user/pdf-guard-vault/` & `/home/user/releases/pdf-guard-vault-v1.0-windows.zip`)**:
-   - Built end-to-end with the full Matt Pocock lifecycle (`domain-modeling`, `to-spec`, `to-tickets`, `tdd`, `implement`, `webapp-testing`, `performance-optimization`, `code-review`, `retro`).
-   - Three-layer ISO 32000-1 (`%PDF-1.4`) pure-Python dynamic PDF watermarking engine (`vault/pdf_stamper.py`), SQLite WAL atomic receipt approval & student wallet (`vault/storage.py`), deep service (`CourseVaultService`), Persian RTL Linear Light-Mode UI (Desktop + Apple iPhone `390x844` responsive), and Telegram bot simulator.
-   - Live preview running on port `8092`; all **13 automated tests (`pytest -v`)** passing.
+1. **Workspace Directories Cleaned**:
+   - Deleted `/home/user/pdf-guard-vault/` and `/home/user/sales-kit/` as requested by the user.
 
 2. **Archived Releases in `/home/user/releases/`**:
    - `pdf-guard-vault-v1.0-windows.zip`
