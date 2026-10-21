@@ -1,15 +1,17 @@
 # Session Handoff (`/home/user/HANDOFF.md`)
 
-## Current State & Archived Releases
+## Current State & Active Deliverables
 
-1. **Archived Releases in `/home/user/releases/`**:
-   - `giyahkala-sentinel-v1.0-windows.zip` (`552,787 bytes`, `43 files`, `21 passed` tests)
-   - `aethergate-vpn-v11.13-windows.zip` (`610,359 bytes`)
-   - `god-mode-monitor-windows.zip` (`325,674 bytes`)
+1. **Active Project — PDF-Guard & Course Vault (`/home/user/pdf-guard-vault/` & `/home/user/releases/pdf-guard-vault-v1.0-windows.zip`)**:
+   - Built end-to-end with the full Matt Pocock lifecycle (`domain-modeling`, `to-spec`, `to-tickets`, `tdd`, `implement`, `webapp-testing`, `performance-optimization`, `code-review`, `retro`).
+   - Three-layer ISO 32000-1 (`%PDF-1.4`) pure-Python dynamic PDF watermarking engine (`vault/pdf_stamper.py`), SQLite WAL atomic receipt approval & student wallet (`vault/storage.py`), deep service (`CourseVaultService`), Persian RTL Linear Light-Mode UI (Desktop + Apple iPhone `390x844` responsive), and Telegram bot simulator.
+   - Live preview running on port `8092`; all **13 automated tests (`pytest -v`)** passing.
 
-2. **Lean Workspace Architecture (`nimazadeh/god_mode`)**:
-   - Root `/home/user/AGENT.md` is a compact router (`Progressive Disclosure`) pointing to `/home/user/agent-docs/01..05-*.md` and `docs/agents/{issue-tracker,triage-labels,domain}.md`.
-   - Duplicate `skills/docs/`, `agents/openai.yaml`, `impeccable/scripts` (`font-index.json` `1.1MB`), archived `.scratch/` tickets, and historical `.git/objects` binary bloat have been purged and squashed.
+2. **Archived Releases in `/home/user/releases/`**:
+   - `pdf-guard-vault-v1.0-windows.zip`
+   - `giyahkala-sentinel-v1.0-windows.zip`
+   - `aethergate-vpn-v11.13-windows.zip`
+   - `god-mode-monitor-windows.zip`
 
 3. **Live Report File**:
    - Always write detailed Persian user reports into `/home/user/report.md` (overwriting the previous report) and keep chat replies to 1–2 short lines without calling `present_file`.

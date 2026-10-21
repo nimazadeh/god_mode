@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <title>سپهر فایل (PDF-Guard) — سامانه فروش فایل، تایید فیش و واترمارک پویای PDF</title>
+  <link rel="stylesheet" href="/assets/css/tokens.css">
+  <link rel="stylesheet" href="/assets/css/app.css">
+</head>
+<body>
+  <a href="#main-workspace" class="skip-link">پرش به محتوای اصلی</a>
+
+  <header class="topbar" role="banner">
+    <div class="brand-group">
+      <span class="brand-mark" aria-hidden="true">PG</span>
+      <div>
+        <h1 class="brand-title">سپهر فایل — سامانه فروش جزوه، تایید فیش و واترمارک پویای PDF</h1>
+        <p class="brand-subtitle">محافظت ۳ لایه از فایل‌های آموزشی (پکیج کامل و فصل‌بندی‌شده) + کیف پول و تایید یک‌کلیکی فیش کارت‌به‌کارت</p>
+      </div>
+    </div>
+    <div class="topbar-actions">
+      <button type="button" id="btn-refresh-dashboard" class="btn">بروزرسانی داده‌ها (R)</button>
+      <a id="btn-export-csv" href="/api/export.csv" class="btn">خروجی اکسل (CSV)</a>
+      <button type="button" id="btn-focus-issue" class="btn btn-primary">صدور آنی PDF واترمارک‌شده</button>
+    </div>
+  </header>
+
+  <main id="main-workspace" class="app-container" role="main">
+    <div id="status-banner" class="status-banner" role="status" aria-live="polite">
+      <span id="status-message">آماده پایش فیش‌های واریزی و صدور آنی فایل‌های PDF با واترمارک ۳ لایه اختصاصی خریدار.</span>
+      <span id="status-timestamp" class="mono-num">READY</span>
+    </div>
+
+    <section aria-labelledby="kpi-heading">
+      <h2 id="kpi-heading" class="sr-only">شاخص‌های کلیدی فروش و امنیت فایل</h2>
+      <div class="kpi-grid">
+        <div class="kpi-card">
+          <div class="kpi-label">مجموع فروش مجوزها (تومان)</div>
+          <div id="kpi-total-revenue" class="kpi-value">0</div>
+          <div class="kpi-sub">پرداخت‌های قطعی و تاییدشده</div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-label">فیش‌های در انتظار تایید</div>
+          <div id="kpi-pending-receipts" class="kpi-value">0</div>
+          <div class="kpi-sub">نیازمند بررسی یک‌کلیکی ادمین</div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-label">مجوزهای PDF صادرشده</div>
+          <div id="kpi-total-licenses" class="kpi-value">0</div>
+          <div class="kpi-sub">دارای امضای دیجیتال SHA-256</div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-label">پکیج‌های کامل جامع</div>
+          <div id="kpi-full-packages" class="kpi-value">0</div>
+          <div class="kpi-sub">فروش دوره کامل با تخفیف</div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-label">جزوات فصل‌بندی‌شده</div>
+          <div id="kpi-chapter-parts" class="kpi-value">0</div>
+          <div class="kpi-sub">فروش بخش‌به‌بخش و تک‌فصل</div>
+        </div>
+        <div class="kpi-card">
+          <div class="kpi-label">موجودی کیف پول دانشجویان</div>
+          <div id="kpi-wallet-total" class="kpi-value">0</div>
+          <div class="kpi-sub">اعتبار تومانی قابل خرید</div>
+        </div>
+      </div>
+    </section>
+
+    <div class="workspace-grid">
+      <section class="panel-card" aria-labelledby="records-table-heading">
+        <h2 id="records-table-heading" class="sr-only">جدول فیش‌های واریزی و مجوزهای PDF واترمارک‌شده</h2>
+        <div class="toolbar-row">
+          <div class="filter-pills" role="tablist" aria-label="فیلتر وضعیت فیش‌ها و مجوزها">
+            <button type="button" class="filter-pill active" data-filter="all" role="tab" aria-selected="true">
+              همه رکوردها <span id="count-all" class="pill-count">0</span>
+            </button>
+            <button type="button" class="filter-pill" data-filter="pending_receipts" role="tab" aria-selected="false">
+              فیش‌های منتظر تایید <span id="count-pending" class="pill-count">0</span>
+            </button>
+            <button type="button" class="filter-pill" data-filter="licenses" role="tab" aria-selected="false">
+              مجوزهای PDF صادرشده <span id="count-licenses" class="pill-count">0</span>
+            </button>
+            <button type="button" class="filter-pill" data-filter="full_package" role="tab" aria-selected="false">
+              پکیج کامل <span id="count-full-pkg" class="pill-count">0</span>
+            </button>
+            <button type="button" class="filter-pill" data-filter="chapter_part" role="tab" aria-selected="false">
+              تک‌فصل <span id="count-chapter" class="pill-count">0</span>
+            </button>
+          </div>
+          <div class="search-box">
+            <label for="search-input" class="sr-only">جستجوی نام دانشجو، موبایل، کد رهگیری یا عنوان جزوه</label>
+            <input
+              type="search"
+              id="search-input"
+              class="input-control"
+              placeholder="جستجوی نام، موبایل، کد فیش یا عنوان جزوه (/)"
+            >
+          </div>
+        </div>
+
+        <div class="table-scroll">
+          <table class="data-table">
+            <thead>
+              <tr>
+                <th scope="col">نوع و کد رهگیری</th>
+                <th scope="col">دانشجو / خریدار</th>
+                <th scope="col">عنوان محصول آموزشی</th>
+                <th scope="col">نوع عرضه</th>
+                <th scope="col">مبلغ (تومان)</th>
+                <th scope="col">وضعیت / واترمارک</th>
+                <th scope="col">عملیات سریع</th>
+              </tr>
+            </thead>
+            <tbody id="vault-table-body"></tbody>
+          </table>
+        </div>
+      </section>
+
+      <aside class="sidebar-stack" aria-label="پنل بازرس واترمارک و صدور مجوز">
+        <section class="panel-card" aria-labelledby="inspector-heading">
+          <div class="section-header">
+            <span id="inspector-heading">بازرس واترمارک ۳ لایه و جزئیات رکورد</span>
+            <span id="inspector-badge" class="badge badge-chapter">انتخاب‌شده</span>
+          </div>
+          <div class="section-body">
+            <div id="inspector-details" class="detail-list"></div>
+            <div id="inspector-watermark-preview" class="pdf-preview-sheet">
+              <div id="preview-header-line" class="pdf-preview-banner">PDF-GUARD FORENSIC HEADER</div>
+              <div id="preview-diagonal-line" class="pdf-preview-diagonal">LICENSED TO BUYER | SHA256</div>
+              <div id="preview-footer-line" class="pdf-preview-banner">Exclusive License Footer</div>
+            </div>
+            <div id="inspector-actions" style="margin-top: 12px; display: flex; gap: 8px; flex-wrap: wrap;"></div>
+          </div>
+        </section>
+
+        <section class="panel-card" aria-labelledby="issue-form-heading">
+          <div class="section-header">
+            <span id="issue-form-heading">صدور آنی PDF واترمارک‌شده (ویژه ادمین)</span>
+          </div>
+          <div class="section-body">
+            <form id="form-issue-license" class="form-grid">
+              <div>
+                <label class="form-label" for="issue-student-name">نام و نام خانوادگی خریدار</label>
+                <input id="issue-student-name" class="input-control" type="text" value="کیوان صادقی" required>
+              </div>
+              <div>
+                <label class="form-label" for="issue-student-phone">شماره موبایل خریدار (درج در واترمارک)</label>
+                <input id="issue-student-phone" class="input-control mono-num" type="text" value="09124448899" required>
+              </div>
+              <div>
+                <label class="form-label" for="issue-product-select">انتخاب پکیج کامل یا تک‌فصل</label>
+                <select id="issue-product-select" class="select-control"></select>
+              </div>
+              <button type="submit" id="btn-submit-issue" class="btn btn-primary">تولید مجوز و آماده‌سازی PDF اختصاصی</button>
+            </form>
+          </div>
+        </section>
+
+        <section class="panel-card" aria-labelledby="telegram-sim-heading">
+          <div class="section-header">
+            <span id="telegram-sim-heading">شبیه‌ساز زنده ربات تلگرام فروش فایل</span>
+          </div>
+          <div class="section-body">
+            <div style="display: flex; gap: 6px; flex-wrap: wrap;">
+              <button type="button" class="btn btn-sm tg-cmd-btn" data-cmd="/start">/start</button>
+              <button type="button" class="btn btn-sm tg-cmd-btn" data-cmd="/catalog">/catalog (لیست جزوات)</button>
+              <button type="button" class="btn btn-sm tg-cmd-btn" data-cmd="/myfiles">/myfiles (فایل‌های من)</button>
+            </div>
+            <div id="telegram-bot-output" class="bot-console">برای مشاهده پاسخ ربات تلگرام روی یکی از دستورات بالا کلیک کنید.</div>
+          </div>
+        </section>
+      </aside>
+    </div>
+  </main>
+
+  <script src="/assets/js/app.js"></script>
+</body>
+</html>
