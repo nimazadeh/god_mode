@@ -1,0 +1,11 @@
+.ssh/
+.cache/
+.local/
+.npm/
+.venv/
+venv/
+__pycache__/
+.pytest_cache/
+*.pyc
+*.sqlite3
+.sudo_as_admin_successful
