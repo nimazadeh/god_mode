@@ -1,0 +1,50 @@
+{
+  "best_cf_ip": "104.18.12.206",
+  "best_cf_rtt_ms": 19.8,
+  "best_gfe_ip": "216.239.36.120",
+  "best_gfe_rtt_ms": 4.5,
+  "mined_rounds": 1,
+  "verified_count": 8,
+  "verified_ips": [
+    {
+      "ip": "104.18.12.206",
+      "cdn": "CLOUDFLARE",
+      "rtt_ms": 19.8
+    },
+    {
+      "ip": "104.18.14.206",
+      "cdn": "CLOUDFLARE",
+      "rtt_ms": 22.4
+    },
+    {
+      "ip": "104.18.13.206",
+      "cdn": "CLOUDFLARE",
+      "rtt_ms": 23.9
+    },
+    {
+      "ip": "104.18.15.206",
+      "cdn": "CLOUDFLARE",
+      "rtt_ms": 25.0
+    },
+    {
+      "ip": "216.239.36.120",
+      "cdn": "GOOGLE_GFE",
+      "rtt_ms": 4.5
+    },
+    {
+      "ip": "216.239.34.120",
+      "cdn": "GOOGLE_GFE",
+      "rtt_ms": 5.6
+    },
+    {
+      "ip": "216.239.38.120",
+      "cdn": "GOOGLE_GFE",
+      "rtt_ms": 5.9
+    },
+    {
+      "ip": "216.239.32.120",
+      "cdn": "GOOGLE_GFE",
+      "rtt_ms": 6.3
+    }
+  ]
+}

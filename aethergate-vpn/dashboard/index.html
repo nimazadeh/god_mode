@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>AetherGate — Live Network Telemetry &amp; Stream Monitor</title>
+  <link rel="icon" type="image/x-icon" href="/favicon.ico" />
+  <link rel="stylesheet" href="/css/variables.css?v=10.8" />
+  <link rel="stylesheet" href="/css/layout.css?v=10.8" />
+</head>
+<body>
+  <div class="app-shell">
+    <header class="monitor-topbar">
+      <div class="topbar-left">
+        <span class="brand-title">AETHERGATE</span>
+        <span id="tunnel-state-badge" class="badge badge-ok">CONNECTED • PROTECTED</span>
+        <span id="active-geoip-badge" class="badge badge-cyan" style="gap:6px;">
+          <img id="active-geoip-flag" width="18" height="12" alt="Exit Flag" src="data:image/svg+xml;utf8,&lt;svg xmlns='http://www.w3.org/2000/svg' width='22' height='14'&gt;&lt;rect width='22' height='14' rx='3' fill='%233b82f6'/&gt;&lt;text x='11' y='10' font-family='sans-serif' font-size='8' font-weight='bold' fill='white' text-anchor='middle'&gt;US&lt;/text&gt;&lt;/svg&gt;" />
+          <span id="active-geoip-text">US • Virginia</span>
+        </span>
+      </div>
+
+      <div class="topbar-center">
+        <input id="log-search-input" class="input-box log-search-input" type="search" placeholder="Filter live stream (host, IP, stage, JA4)..." />
+        <div class="filter-group">
+          <button class="btn btn-primary" data-log-filter="ALL">All</button>
+          <button class="btn" data-log-filter="RELAY">Relayed</button>
+          <button class="btn" data-log-filter="DIRECT">Direct</button>
+          <button class="btn" data-log-filter="ERR">Errors</button>
+        </div>
+      </div>
+
+      <div class="topbar-right">
+        <button id="btn-pause-log" class="btn">Pause Stream</button>
+        <button id="btn-copy-diag" class="btn btn-active">Copy Log</button>
+        <button id="btn-toggle-tunnel" class="btn btn-power btn-active">[DISCONNECT]</button>
+      </div>
+    </header>
+
+    <main class="monitor-main">
+      <div id="diag-console-view" class="console-box" role="log" aria-label="Colorized Diagnostic Console"></div>
+      <textarea id="diag-report-box" class="input-box" rows="20" readonly style="display:none;"></textarea>
+    </main>
+
+    <details class="advanced-drawer">
+      <summary>Engine Settings, Diagnostics &amp; Routing Controls</summary>
+      <article class="panel" style="margin-top: 6px;">
+        <div class="row-inline">
+          <span id="lan-gateway-badge" class="badge badge-ok">LAN NODE: 0.0.0.0:10808</span>
+          <span id="proxy-port-badge" class="badge">127.0.0.1:10808</span>
+          <span id="prewarm-pool-badge" class="badge badge-cyan">0-RTT POOL: 0 READY</span>
+          <span id="win-proxy-badge" class="badge">SYS PROXY: ON</span>
+          <span id="cli-env-badge" class="badge">CLI ENV: ON</span>
+          <span id="diag-copy-status" class="badge">Live Stream</span>
+          <button id="btn-toggle-cloak" class="btn btn-primary">US Cloak: GLOBAL ON</button>
+          <button id="btn-toggle-lan" class="btn">LAN Wi-Fi Node: ON</button>
+          <button id="btn-run-diag" class="btn">Run Diagnostics</button>
+          <button id="btn-mine-ips" class="btn">Mine Clean IPs</button>
+          <button id="btn-refresh-relays" class="btn">Refresh Relays</button>
+        </div>
+        <section class="stats-grid" aria-label="Live Telemetry">
+          <article class="stat-card"><div class="stat-val" id="stat-rtt">0.0 ms</div><div class="stat-lbl">Latency (RTT)</div></article>
+          <article class="stat-card"><div class="stat-val" id="stat-packets">0</div><div class="stat-lbl">Protected Streams</div></article>
+          <article class="stat-card"><div class="stat-val" id="stat-padding">0 B</div><div class="stat-lbl">RFC 9113 Padding</div></article>
+          <article class="stat-card"><div class="stat-val" id="stat-cache">0 HIT / 0 MISS</div><div class="stat-lbl">RFC 9111 Cache</div></article>
+        </section>
+        <div class="row-inline">
+          <button class="btn btn-active" data-transport="DPI_DESYNC_DOH">4-Byte SNI Shredder + Zero-Drop Replay</button>
+          <button id="btn-run-benchmark" class="btn">Test Engine Speed</button>
+          <span id="benchmark-result-box" class="badge badge-ok">64KB Full-Duplex Ready</span>
+          <button id="btn-test-camouflage" class="btn">Test Camouflage</button>
+          <span id="camouflage-probe-status" class="badge">Unprobed</span>
+        </div>
+        <div class="row-inline">
+          <input id="profile-uri-input" class="input-box" type="text" placeholder="aethergate://..." />
+          <button id="btn-import-uri" class="btn">Import URI</button>
+        </div>
+        <div class="row-inline">
+          <input id="route-pattern-input" class="input-box" type="text" placeholder="Domain or IP prefix (e.g. example.com)" />
+          <select id="route-action-select" class="btn">
+            <option value="GEOIP_RELAY">GEOIP_RELAY</option>
+            <option value="TUNNEL">TUNNEL</option>
+            <option value="DIRECT">DIRECT</option>
+            <option value="BLOCK">BLOCK</option>
+          </select>
+          <button id="btn-add-route" class="btn">Add Rule</button>
+        </div>
+        <table class="data-table"><tbody id="routing-rules-tbody"></tbody></table>
+        <table class="data-table" style="margin-top: 8px;"><tbody id="recent-routes-tbody"></tbody></table>
+      </article>
+    </details>
+  </div>
+
+  <script src="/js/api.js?v=10.8"></script>
+  <script src="/js/ui.js?v=10.8"></script>
+  <script src="/js/app.js?v=10.8"></script>
+</body>
+</html>

@@ -1,0 +1,14 @@
+{
+  "active_name": "Local-Loopback-RFC-Node",
+  "profiles": [
+    {
+      "name": "Local-Loopback-RFC-Node",
+      "server_url": "http://127.0.0.1:8443",
+      "secret_key": "aether-personal-rfc9421-master-key-2026",
+      "transport": "DPI_DESYNC_DOH",
+      "padding_enabled": true,
+      "camouflage_domain": "docs.aether-cloud.local",
+      "uri": "aethergate://eyJuYW1lIjoiTG9jYWwtTG9vcGJhY2stUkZDLU5vZGUiLCJzZXJ2ZXJfdXJsIjoiaHR0cDovLzEyNy4wLjAuMTo4NDQzIiwic2VjcmV0X2tleSI6ImFldGhlci1wZXJzb25hbC1yZmM5NDIxLW1hc3Rlci1rZXktMjAyNiIsInRyYW5zcG9ydCI6IldTX1JGQzg0NDEiLCJwYWRkaW5nX2VuYWJsZWQiOnRydWUsImNhbW91ZmxhZ2VfZG9tYWluIjoiZG9jcy5hZXRoZXItY2xvdWQubG9jYWwifQ#Local-Loopback-RFC-Node"
+    }
+  ]
+}
