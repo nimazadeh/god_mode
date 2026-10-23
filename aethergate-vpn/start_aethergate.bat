@@ -1,7 +1,7 @@
 @echo off
 chcp 65001 >nul
 setlocal EnableDelayedExpansion
-title AetherGate VPN v11.13 - RFC 9614 Privacy and Live Stream Monitor
+title AetherGate VPN v11.14 - Google AI Studio 403 Immunity & CF-Worker Bypass Guard
 cd /d "%~dp0"
 
 where python >nul 2>nul

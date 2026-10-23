@@ -7,9 +7,12 @@ import ssl
 import time
 from typing import Any
 
-from constants import CF_ANYCAST_VIP, DEFAULT_GEOIP_RELAYS, DEFAULT_PERSONAL_CF_WORKER, DEFAULT_SECRET_KEY, GITHUB_RAW_VIP
-from tunnel.dpi_desync import shred_tls_sni_polymorphic
-from tunnel.satoshi_engine import PreWarmedSocketPool, spawn_background_task
+from constants import (
+    CF_ANYCAST_VIP, DEFAULT_GEOIP_RELAYS, DEFAULT_PERSONAL_CF_WORKER, DEFAULT_SECRET_KEY,
+    GFE_ANYCAST_VIP, GITHUB_RAW_VIP, GOOGLE_EYE_HOSTS_BLOCK_CF_WORKER,
+)
+from tunnel.dpi_desync import shred_tls_sni_polymorphic, split_tls_record_layer
+from tunnel.satoshi_engine import PreWarmedSocketPool, create_unverified_tls_client_context, spawn_background_task
 from tunnel.serverless_worker import is_cloudflare_anycast_ip, open_cf_worker_stream
 
 # Sanctioned ISO country codes that trigger HTTP 403/451 blocks on US/EU cloud platforms when used as exit nodes.
@@ -119,6 +122,93 @@ async def _handshake_http_connect_ip(relay_reader: asyncio.StreamReader, relay_w
     response_head = await relay_reader.readuntil(b"\r\n\r\n")
     status_line = response_head.split(b"\r\n", 1)[0]
     return b" 200 " in status_line
+
+
+def _is_google_sensitive_target(target_ip: str, target_host_hint: str = "") -> bool:
+    """Return True for Google AI Studio / Gemini / OAuth GFE hostnames and their resolved GCP Anycast IPs so the personal
+    Cloudflare Worker (a known Cloudflare egress) is never used for these destinations; Google hard-403s Cloudflare-edge
+    exit IPs on /api-keys, OAuth, and generativelanguage endpoints, so we must force real US relays for these hosts to avoid lockout.
+    """
+    clean_ip = (target_ip or "").strip()
+    clean_host = (target_host_hint or "").lower().strip().rstrip(".")
+    # Hostname match always wins so YouTube GVS 173.194.* video edges are never mislabeled as sensitive AI endpoints.
+    if clean_host:
+        for h in GOOGLE_EYE_HOSTS_BLOCK_CF_WORKER:
+            if clean_host == h or clean_host.endswith("." + h) or h in clean_host:
+                return True
+    return False
+
+
+async def _pump_tls_bio_handshake(
+    upstream_reader: asyncio.StreamReader, upstream_writer: asyncio.StreamWriter,
+    ssl_object: ssl.SSLObject, incoming_bio: ssl.MemoryBIO, outgoing_bio: ssl.MemoryBIO,
+    timeout: float = 3.0,
+) -> None:
+    """Drive a MemoryBIO TLS handshake to completion so AI Studio probes can issue HTTP/1.1 GET requests over relayed sockets."""
+    for _ in range(8):
+        try:
+            ssl_object.do_handshake()
+            return
+        except ssl.SSLWantReadError:
+            pending = outgoing_bio.read()
+            if pending:
+                upstream_writer.write(pending)
+                await upstream_writer.drain()
+            chunk = await asyncio.wait_for(upstream_reader.read(16384), timeout=timeout)
+            if not chunk:
+                raise ConnectionError("TLS handshake EOF during AI Studio probe")
+            incoming_bio.write(chunk)
+
+
+async def _probe_relay_google_ai_studio(relay_kind: str, relay_host: str, relay_port: int, timeout: float = 2.8) -> bool:
+    """Verify a relay can GET aistudio.google.com/ without hitting Google's generic 403 block page. Relays returning 403 are rejected
+    even though TCP + TLS + Cloudflare TLS succeed, because Google blocks their ASN for AI Studio specifically.
+    """
+    relay_reader = relay_writer = None
+    try:
+        relay_reader, relay_writer = await _connect_single_relay(
+            relay_kind, relay_host, relay_port, GFE_ANYCAST_VIP, 443, timeout=timeout, use_worker_chain=False
+        )
+        tls_context = ssl.create_default_context()
+        incoming_bio, outgoing_bio = ssl.MemoryBIO(), ssl.MemoryBIO()
+        ssl_object = tls_context.wrap_bio(incoming_bio, outgoing_bio, server_hostname="aistudio.google.com")
+        try:
+            ssl_object.do_handshake()
+        except ssl.SSLWantReadError:
+            pass
+        r1, r2 = split_tls_record_layer(outgoing_bio.read())
+        relay_writer.write(r1 + r2)
+        await relay_writer.drain()
+        await _pump_tls_bio_handshake(relay_reader, relay_writer, ssl_object, incoming_bio, outgoing_bio, timeout=timeout)
+        http_req = (
+            b"GET / HTTP/1.1\r\nHost: aistudio.google.com\r\n"
+            b"User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/131.0.0.0\r\n"
+            b"Connection: close\r\nAccept: text/html\r\n\r\n"
+        )
+        ssl_object.write(http_req)
+        relay_writer.write(outgoing_bio.read())
+        await relay_writer.drain()
+        body = b""
+        for _ in range(4):
+            try:
+                body += ssl_object.read(4096)
+                if body:
+                    break
+            except ssl.SSLWantReadError:
+                chunk = await asyncio.wait_for(relay_reader.read(8192), timeout=timeout)
+                if not chunk:
+                    break
+                incoming_bio.write(chunk)
+        head = body.split(b"\r\n", 1)[0]
+        lowered = body[:4096].lower()
+        if b" 403 " in head or b"your client does not have permission" in lowered or b"that\xe2\x80\x99s an error" in lowered:
+            return False
+        return bool(head and (b" 200 " in head or b" 30" in head or b" 404 " in head))
+    except Exception:
+        return False
+    finally:
+        if relay_writer is not None:
+            relay_writer.close()
 
 
 async def _connect_single_relay(
@@ -250,9 +340,15 @@ class GeoIPRelayPool:
         self,
         target_ip: str,
         target_port: int,
+        target_host_hint: str = "",
     ) -> tuple[asyncio.StreamReader, asyncio.StreamWriter, str] | None:
-        """Route all relayed targets (including Cloudflare via RFC 6052 NAT64) through the personal Worker so public proxies are avoided."""
+        """Route relayed targets through the personal Worker, but SKIP it for Google AI Studio / Gemini / OAuth endpoints
+        because Cloudflare-edge egress IPs receive a hard HTTP 403 ('That is an error ... your client does not have permission')
+        from Google GFE on /api-keys and OAuth paths, so those destinations must always traverse real US relays to avoid permanent lockout.
+        """
         if not self.personal_worker_host or not self.personal_worker_verified or target_port not in (80, 443, 8080, 8443):
+            return None
+        if _is_google_sensitive_target(target_ip, target_host_hint):
             return None
         if getattr(self._race_batch, "__name__", "") != "_race_batch" or getattr(self._try_indexed_relay, "__name__", "") != "_try_indexed_relay":
             return None
@@ -355,10 +451,13 @@ class GeoIPRelayPool:
         target_ip: str,
         target_port: int,
         allow_worker: bool = True,
+        target_host_hint: str = "",
     ) -> tuple[asyncio.StreamReader, asyncio.StreamWriter, str]:
-        """Try index 0 first for sticky web sessions, cascade tightly to avoid multi-country IP pinball, and fail closed."""
+        """Try index 0 first for sticky web sessions, cascade tightly to avoid multi-country IP pinball, and fail closed.
+        target_host_hint is used to block the personal CF Worker on Google AI Studio / Gemini where Cloudflare egress IPs hard-403.
+        """
         start_time = time.perf_counter()
-        worker_conn = await self._try_personal_worker(target_ip, target_port) if allow_worker else None
+        worker_conn = await self._try_personal_worker(target_ip, target_port, target_host_hint=target_host_hint) if allow_worker else None
         if worker_conn is not None:
             self.last_rtt_ms = round((time.perf_counter() - start_time) * 1000.0, 1)
             return worker_conn
@@ -399,8 +498,11 @@ class GeoIPRelayPool:
         relay_kind: str,
         raw_address: str,
         semaphore: asyncio.Semaphore,
+        probe_google_ai: bool = False,
     ) -> tuple[float, tuple[str, str, int]] | None:
-        """Verify a candidate relay completes both SOCKS5/HTTP CONNECT and a CA-signed TLS 1.3 handshake to prevent MITM cert errors."""
+        """Verify a candidate relay completes both SOCKS5/HTTP CONNECT, a CA-signed TLS 1.3 handshake to Cloudflare,
+        and — when probe_google_ai is True — a real HTTP GET to aistudio.google.com to filter relays Google 403-blocks.
+        """
         if not _is_clean_relay_addr(raw_address):
             return None
         relay_host, _, port_str = raw_address.split("@")[-1].strip().partition(":")
@@ -415,6 +517,11 @@ class GeoIPRelayPool:
                 )
                 if not await _verify_relay_tls_passthrough(relay_reader, relay_writer, timeout=1.6):
                     return None
+                if relay_writer is not None:
+                    relay_writer.close()
+                    relay_writer = None
+                if probe_google_ai and not await _probe_relay_google_ai_studio(relay_kind, relay_host, int(port_str), timeout=2.6):
+                    return None
                 elapsed_ms = round((time.perf_counter() - start_time) * 1000.0, 1)
                 return elapsed_ms, (relay_kind, relay_host, int(port_str))
             except Exception:
@@ -423,12 +530,15 @@ class GeoIPRelayPool:
                 if relay_writer is not None:
                     relay_writer.close()
 
-    async def heal_and_sort_relays(self) -> dict[str, Any]:
-        """Keep the current sticky index-0 relay pinned if healthy so background sorting never changes exit IP mid-session."""
+    async def heal_and_sort_relays(self, probe_google_ai: bool = True) -> dict[str, Any]:
+        """Keep the current sticky index-0 relay pinned if healthy so background sorting never changes exit IP mid-session.
+        When probe_google_ai is True, every candidate is also tested against aistudio.google.com/ so relays that Google
+        hard-403s are automatically demoted out of the pool.
+        """
         semaphore = asyncio.Semaphore(10)
         current_primary = self.relays[0] if self.relays else None
         probe_results = await asyncio.gather(
-            *(self._probe_candidate(relay_kind, f"{relay_host}:{relay_port}", semaphore) for relay_kind, relay_host, relay_port in self.relays)
+            *(self._probe_candidate(relay_kind, f"{relay_host}:{relay_port}", semaphore, probe_google_ai=probe_google_ai) for relay_kind, relay_host, relay_port in self.relays)
         )
         healthy_relays = [relay_item for _, relay_item in sorted([res for res in probe_results if res], key=lambda item: item[0])]
         if len(healthy_relays) < 2:

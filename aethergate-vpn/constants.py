@@ -2,7 +2,7 @@
 
 from pathlib import Path
 
-AETHERGATE_VERSION = "v11.13"
+AETHERGATE_VERSION = "v11.14"
 BASE_DIR = Path(__file__).resolve().parent
 DASHBOARD_DIR = BASE_DIR / "dashboard"
 CONFIG_DIR = BASE_DIR / "config"
@@ -89,6 +89,19 @@ BLACKHOLED_GGC_PREFIXES = ("62.212.", "94.20.")
 CF_ANYCAST_VIP = "104.18.14.206"
 GITHUB_RAW_VIP = "185.199.108.133"
 
+# Google AI Studio / Gemini / OAuth hostnames that hard-block Cloudflare-egress exit IPs (the personal CF Worker returns 403).
+# These destinations MUST traverse genuine US SOCKS5/HTTP relays to prevent 'Your client does not have permission' lockouts.
+GOOGLE_EYE_HOSTS_BLOCK_CF_WORKER = (
+    "aistudio.google.com", "gemini.google.com", "alkalimakersuite",
+    "makersuite.google.com", "accounts.google.com", "myaccount.google.com",
+    "apis.google.com", "clients1.google.com", "clients2.google.com",
+    "clients3.google.com", "clients4.google.com", "clients5.google.com",
+    "clients6.google.com", "waa-pa.clients6.google.com", "signaler-pa.clients6.google.com",
+    "ogads-pa.clients6.google.com", "ogs.google.com", "jnn-pa.googleapis.com",
+    "generativelanguage.googleapis.com", "notebooklm.google.com", "idx.google.com",
+    "colab.research.google.com",
+)
+
 # Restrict Cloudflare miner candidates to 104.18.* because 104.16/17/19.* trigger Cloudflare Error 1034 on third-party Host headers.
 CF_MINER_CANDIDATES = ("104.18.14.206", "104.18.15.206", "104.18.12.206", "104.18.13.206")
 GFE_MINER_CANDIDATES = ("216.239.38.120", "216.239.32.120", "216.239.34.120", "216.239.36.120", "142.250.185.78")
@@ -124,6 +137,9 @@ ACCESS_DENIED_SIGNATURES = (
     b"unsupported country", b"region not supported", b"_incapsula_resource", b"451 unavailable",
     b"error 1009", b"error 1020", b"geo-restricted", b"georestricted",
     b"10.10.34.36", b"<title>ntl1</title>", b"<title>nte1</title>", b"invalidkeyword&policy=mainpolicy",
+    # Google AI Studio / Gemini OAuth endpoints emit this generic 403 when they see a Cloudflare or proxy exit IP.
+    b"that's an error", b"that\xe2\x80\x99s an error", b"your client does not have permission",
+    b"that\xe2\x80\x99s all we know", b"403. that",
 )
 
 GEOIP_RELAY_SUFFIXES = (
