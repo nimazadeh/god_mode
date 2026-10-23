@@ -213,20 +213,22 @@ async def _pipe_direction(src_r: asyncio.StreamReader, dst_w: asyncio.StreamWrit
     return total
 
 
-async def _open_smart_upstream(target_ip: str, target_port: int, relay_pool: Any | None, force_relay: bool) -> tuple[asyncio.StreamReader, asyncio.StreamWriter, str]:
-    """Route through the US/EU relay pool first (avoiding 104.28.* Cloudflare Geofeed blocks) and fall back to personal Worker."""
+async def _open_smart_upstream(target_ip: str, target_port: int, relay_pool: Any | None, force_relay: bool, target_host_hint: str = "") -> tuple[asyncio.StreamReader, asyncio.StreamWriter, str]:
+    """Route through the US/EU relay pool first (avoiding 104.28.* Cloudflare Geofeed blocks) and fall back to personal Worker.
+    target_host_hint is forwarded so the relay pool can refuse to use the CF Worker for Google AI Studio endpoints.
+    """
     if relay_pool is not None and (force_relay or relay_pool.is_escalated(target_ip)):
         try:
-            return await relay_pool.open_relayed_connection(target_ip, target_port, allow_worker=False)
+            return await relay_pool.open_relayed_connection(target_ip, target_port, allow_worker=False, target_host_hint=target_host_hint)
         except TypeError:
-            return await relay_pool.open_relayed_connection(target_ip, target_port)
+            return await relay_pool.open_relayed_connection(target_ip, target_port, target_host_hint=target_host_hint)
         except Exception:
-            return await relay_pool.open_relayed_connection(target_ip, target_port, allow_worker=True)
+            return await relay_pool.open_relayed_connection(target_ip, target_port, allow_worker=True, target_host_hint=target_host_hint)
     r, w = await asyncio.wait_for(asyncio.open_connection(target_ip, target_port), timeout=3.5)
     return r, w, target_ip
 
 
-async def _failover_and_replay(peer_ip: str, first: bytes, desync_tls: bool, target_ip: str, target_port: int, via: str, relay_pool: Any, force_relay: bool) -> tuple[asyncio.StreamReader, asyncio.StreamWriter, bytes, str]:
+async def _failover_and_replay(peer_ip: str, first: bytes, desync_tls: bool, target_ip: str, target_port: int, via: str, relay_pool: Any, force_relay: bool, target_host_hint: str = "") -> tuple[asyncio.StreamReader, asyncio.StreamWriter, bytes, str]:
     """Replay the captured ClientHello over a fresh socket or backup relay so mid-handshake DPI resets never surface to the browser."""
     if not force_relay and target_ip != "127.0.0.1":
         if peer_ip.startswith(BLACKHOLED_GGC_PREFIXES):
@@ -236,14 +238,14 @@ async def _failover_and_replay(peer_ip: str, first: bytes, desync_tls: bool, tar
         return r2, w2, b"", f"REPLAYED_DIRECT_{target_ip}"
     relay_pool.escalate_ip(target_ip) if via == target_ip else relay_pool.demote_relay(via)
     try:
-        r2, w2, via2 = await relay_pool.open_relayed_connection(target_ip, target_port, allow_worker=not str(via).startswith("cfworker://"))
+        r2, w2, via2 = await relay_pool.open_relayed_connection(target_ip, target_port, allow_worker=not str(via).startswith("cfworker://"), target_host_hint=target_host_hint)
     except TypeError:
-        r2, w2, via2 = await relay_pool.open_relayed_connection(target_ip, target_port)
+        r2, w2, via2 = await relay_pool.open_relayed_connection(target_ip, target_port, target_host_hint=target_host_hint)
     await _send_first_packet(w2, first, desync_tls=desync_tls, via_relay=True)
     return r2, w2, b"", f"REPLAYED_VIA_{via2}"
 
 
-async def _send_and_verify_server_hello(rem_r: asyncio.StreamReader, rem_w: asyncio.StreamWriter, first: bytes, desync_tls: bool, target_ip: str, target_port: int, via: str, relay_pool: Any | None, force_relay: bool = False) -> tuple[asyncio.StreamReader, asyncio.StreamWriter, bytes, str]:
+async def _send_and_verify_server_hello(rem_r: asyncio.StreamReader, rem_w: asyncio.StreamWriter, first: bytes, desync_tls: bool, target_ip: str, target_port: int, via: str, relay_pool: Any | None, force_relay: bool = False, target_host_hint: str = "") -> tuple[asyncio.StreamReader, asyncio.StreamWriter, bytes, str]:
     """Verify the upstream returns a ServerHello (except on client-first MTProto) so silent DPI blackholes trigger instant replay."""
     is_tg_mtproto = bool(first and not is_tls_client_hello(first) and target_ip.startswith(("149.154.", "91.108.")))
     is_relayed = via != target_ip
@@ -260,19 +262,19 @@ async def _send_and_verify_server_hello(rem_r: asyncio.StreamReader, rem_w: asyn
     peer = rem_w.get_extra_info("peername")
     peer_ip = peer[0] if isinstance(peer, tuple) and peer else target_ip
     rem_w.close()
-    return await _failover_and_replay(peer_ip, first, desync_tls, target_ip, target_port, via, relay_pool, force_relay)
+    return await _failover_and_replay(peer_ip, first, desync_tls, target_ip, target_port, via, relay_pool, force_relay, target_host_hint=target_host_hint)
 
 
-async def relay_full_duplex_stream(client_r: asyncio.StreamReader, client_w: asyncio.StreamWriter, target_ip: str, target_port: int, desync_tls: bool = True, diag: Any | None = None, cid: int = 0, relay_pool: Any | None = None, force_relay: bool = False) -> tuple[int, int]:
+async def relay_full_duplex_stream(client_r: asyncio.StreamReader, client_w: asyncio.StreamWriter, target_ip: str, target_port: int, desync_tls: bool = True, diag: Any | None = None, cid: int = 0, relay_pool: Any | None = None, force_relay: bool = False, target_host_hint: str = "") -> tuple[int, int]:
     """Coordinate upstream connection, SNI desync, JA4 telemetry logging, and bidirectional piping with guaranteed socket cleanup."""
     t0 = time.perf_counter()
-    rem_r, rem_w, via = await _open_smart_upstream(target_ip, target_port, relay_pool, force_relay)
+    rem_r, rem_w, via = await _open_smart_upstream(target_ip, target_port, relay_pool, force_relay, target_host_hint=target_host_hint)
     if diag and cid:
         diag.log_stage(cid, "TCP_CONNECT", ip=via, port=target_port, tcp_ms=round((time.perf_counter() - t0) * 1000.0, 1))
     _enable_tcp_nodelay(rem_w), _configure_client_socket(client_w)
     try:
         first = await asyncio.wait_for(client_r.read(32768), timeout=5.0)
-        rem_r, rem_w, peek, mode = await _send_and_verify_server_hello(rem_r, rem_w, first, desync_tls, target_ip, target_port, via, relay_pool, force_relay)
+        rem_r, rem_w, peek, mode = await _send_and_verify_server_hello(rem_r, rem_w, first, desync_tls, target_ip, target_port, via, relay_pool, force_relay, target_host_hint=target_host_hint)
         if peek:
             client_w.write(peek), await client_w.drain()
         if diag and cid and first:

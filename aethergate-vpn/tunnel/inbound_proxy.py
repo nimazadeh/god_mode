@@ -30,6 +30,7 @@ from tunnel.satoshi_engine import (
     spawn_background_task,
 )
 from tunnel.smart_router import SmartRouter, is_direct_jet_media_host
+from tunnel.geoip_relay import _is_google_sensitive_target
 
 # Known-clean public static asset CDNs that never enforce geo-sanctions, allowing 0ms pre-flight probe bypass.
 _DIRECT_CLEAN_SUFFIXES = (
@@ -282,15 +283,21 @@ class UnifiedInboundProxy:
                 cid=connection_id,
                 relay_pool=(None if decision == "DIRECT" else self.relay_pool),
                 force_relay=(decision == "GEOIP_RELAY"),
+                target_host_hint=target_host,
             )
-            if decision == "TUNNEL" and target_port == 443 and bytes_tx >= 180 and bytes_rx <= 3400 and not is_direct_jet_media_host(target_host):
-                self._probed_clean_hosts.discard(target_host.lower())
-                spawn_background_task(self._bg_scout_probe(target_host, clean_ip, target_port))
             self.dispatcher.bytes_tx += bytes_tx
             self.dispatcher.bytes_rx += bytes_rx
             self.dispatcher.packets_relayed += 1
             duration_ms = round((time.perf_counter() - start_time) * 1000.0, 1)
             actual_via = self.diag.get_actual_via(connection_id, via_label) if decision == "GEOIP_RELAY" else via_label
+            if decision == "TUNNEL" and target_port == 443 and bytes_tx >= 180 and bytes_rx <= 3400 and not is_direct_jet_media_host(target_host):
+                self._probed_clean_hosts.discard(target_host.lower())
+                spawn_background_task(self._bg_scout_probe(target_host, clean_ip, target_port))
+            # Auto-demote a GEOIP relay that returns a tiny body to Google AI Studio / Gemini / OAuth (Google's 403 page is ~1-3 KB).
+            if decision == "GEOIP_RELAY" and target_port == 443 and _is_google_sensitive_target(clean_ip, target_host) and bytes_rx <= 6000 and bytes_tx >= 300:
+                self.diag.log_stage(connection_id, "RELAY_403_DETECTED", target=target_host, via=actual_via, bytes_rx=bytes_rx)
+                self.relay_pool.demote_relay(actual_via)
+                spawn_background_task(self.relay_pool.heal_and_sort_relays(probe_google_ai=True))
             if decision == "GEOIP_RELAY" and bytes_tx >= 1800 and not str(actual_via).startswith("cfworker://"):
                 self.relay_pool.record_stream_outcome(actual_via, bytes_tx, bytes_rx)
             self.diag.log_stage(connection_id, "CLOSED_OK", tx=bytes_tx, rx=bytes_rx, dur_ms=duration_ms, via=actual_via)
